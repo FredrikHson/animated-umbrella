@@ -1,4 +1,5 @@
 import bpy
+from math import *
 import bmesh
 import numpy as np
 from numpy import newaxis as nax
@@ -34,6 +35,7 @@ class PANEL_PT_fCloth(bpy.types.Panel):
 		col = layout.column(align=True)
 		col.operator("object.clothtest",text="add keys",icon="HAND")
 		col.operator("object.contrun",text="run continuous",icon="TIME")
+		col.operator("object.reset",text="reset",icon="FILE_REFRESH")
 		col.prop(settings,"collision_mesh")
 
 class test(bpy.types.Operator):
@@ -57,6 +59,34 @@ class test(bpy.types.Operator):
 				sk=ob.shape_key_add(name="cloth shape")
 				sk.value=1
 			print(ob)
+		return {'FINISHED'}
+
+class reset(bpy.types.Operator):
+	bl_idname = "object.reset"
+	bl_label = "reset shapekey"
+
+	def execute(self,context):
+		print("reset pressed")
+		for ob in bpy.context.selected_objects:
+			if ob.data.shape_keys is None:
+				ob.shape_key_add(name="Basis")
+				ob.shape_key_add(name="cloth rest")
+				sk=ob.shape_key_add(name="cloth shape")
+				sk.value=1
+			keys = ob.data.shape_keys.key_blocks.keys()
+			if "Basis" not in keys:
+				ob.shape_key_add(name="Basis")
+			if "cloth rest" not in keys:
+				ob.shape_key_add(name="cloth rest")
+			if "cloth shape" not in keys:
+				sk=ob.shape_key_add(name="cloth shape")
+				sk.value=1
+			shape=ob.data.shape_keys.key_blocks['cloth shape']
+			origshape=ob.data.shape_keys.key_blocks['Basis']
+			shapedata=[0.0]*len(origshape.data)*3 # numverts*3
+			origshape.data.foreach_get("co",shapedata)
+			shape.data.foreach_set("co",shapedata)
+			shape.value=shape.value
 		return {'FINISHED'}
 
 class contrun(bpy.types.Operator):
@@ -90,18 +120,36 @@ def loopupdate():
 		print("\\");
 	lib.printjunk(25)
 	if(settings.collision_mesh != None):
+		if(settings.collision_mesh.mode != "OBJECT"):
+			bpy.app.timers.unregister(loopupdate)
+			print("not in object mode stopping loopupdate")
+			return
 		lib.printjunk2(3,settings.collision_mesh.name.encode('ascii'))
-	# time.sleep(0.5)
+		shape=settings.collision_mesh.data.shape_keys.key_blocks['cloth shape']
+		origshape=settings.collision_mesh.data.shape_keys.key_blocks['Basis']
+
+
+		# allocate shit
+		shapedata=[0.0]*len(origshape.data)*3 # numverts*3
+		origshape.data.foreach_get("co",shapedata)
+		for i in range(0, 3000 ,3):
+			shapedata[i]=shapedata[i]+sin(bpy.tartarus*0.2+shapedata[i+2])
+			shapedata[i+1]=shapedata[i+1]+cos(bpy.tartarus*0.2+shapedata[i+2])
+
+		shape.data.foreach_set("co",shapedata)
+		shape.value=shape.value
+		settings.collision_mesh
 	bpy.tartarus+=1
 	# lib=reload_lib(lib)
 	if(settings.collision_mesh != None):
 		print(settings.collision_mesh.name)
-	return 0.1666666666666666666666666666666666666666666666666666
+	return 0.01666666666666666666666666666666666666666666666666666
 
 def register():
 	global lib
 	bpy.utils.register_class(PANEL_PT_fCloth)
 	bpy.utils.register_class(test)
+	bpy.utils.register_class(reset)
 	bpy.utils.register_class(contrun)
 	bpy.utils.register_class(FClothSettings)
 	lib = CDLL(libfile)
@@ -117,6 +165,7 @@ def unregister():
 	global lib
 	bpy.utils.unregister_class(PANEL_PT_fCloth)
 	bpy.utils.unregister_class(test)
+	bpy.utils.unregister_class(reset)
 	bpy.utils.unregister_class(contrun)
 	bpy.utils.unregister_class(FClothSettings)
 	if bpy.app.timers.is_registered(loopupdate):
