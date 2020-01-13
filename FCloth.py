@@ -17,6 +17,7 @@ def get_settings(context):
 
 class FClothSettings(bpy.types.PropertyGroup):
 	collision_mesh: bpy.props.PointerProperty(type=bpy.types.Object, name="Collision Mesh")
+	use_c: bpy.props.BoolProperty(name="Use C")
 
 
 class PANEL_PT_fCloth(bpy.types.Panel):
@@ -37,6 +38,7 @@ class PANEL_PT_fCloth(bpy.types.Panel):
 		col.operator("object.contrun",text="run continuous",icon="TIME")
 		col.operator("object.reset",text="reset",icon="FILE_REFRESH")
 		col.prop(settings,"collision_mesh")
+		col.prop(settings,"use_c")
 
 class test(bpy.types.Operator):
 	bl_idname = "object.clothtest"
@@ -109,41 +111,29 @@ bpy.tartarus=0
 def loopupdate():
 	global lib
 	settings = get_settings(bpy.context)
-	print("")
-	if bpy.tartarus % 4 == 0:
-		print("-");
-	if bpy.tartarus % 4 == 1:
-		print("/");
-	if bpy.tartarus % 4 == 2:
-		print("|");
-	if bpy.tartarus % 4 == 3:
-		print("\\");
-	lib.printjunk(25)
 	if(settings.collision_mesh != None):
 		if(settings.collision_mesh.mode != "OBJECT"):
 			bpy.app.timers.unregister(loopupdate)
 			print("not in object mode stopping loopupdate")
 			return
-		lib.printjunk2(3,settings.collision_mesh.name.encode('ascii'))
 		shape=settings.collision_mesh.data.shape_keys.key_blocks['cloth shape']
 		origshape=settings.collision_mesh.data.shape_keys.key_blocks['Basis']
+		if(settings.use_c):
+			shape_ptr=cast(shape.as_pointer(),POINTER(c_int))
+			origshape_ptr=cast(origshape.as_pointer(),POINTER(c_int))
+			lib.dothewave(origshape_ptr,shape_ptr,bpy.tartarus)
+		else:
+			# allocate shit
+			shapedata=[0]*len(origshape.data)*3 # numverts*3
+			origshape.data.foreach_get("co",shapedata)
+			for i in range(0, int(len(shapedata)),3):
+				shapedata[i]=shapedata[i]+sin(bpy.tartarus*0.5+shapedata[i+2]*2.5)
+				shapedata[i+1]=shapedata[i+1]+cos(bpy.tartarus*0.2+shapedata[i+2]*1)
 
-
-		# allocate shit
-		shapedata=[0.0]*len(origshape.data)*3 # numverts*3
-		origshape.data.foreach_get("co",shapedata)
-		for i in range(0, 3000 ,3):
-			shapedata[i]=shapedata[i]+sin(bpy.tartarus*0.2+shapedata[i+2])
-			shapedata[i+1]=shapedata[i+1]+cos(bpy.tartarus*0.2+shapedata[i+2])
-
-		shape.data.foreach_set("co",shapedata)
+			shape.data.foreach_set("co",shapedata)
 		shape.value=shape.value
-		settings.collision_mesh
 	bpy.tartarus+=1
-	# lib=reload_lib(lib)
-	if(settings.collision_mesh != None):
-		print(settings.collision_mesh.name)
-	return 0.01666666666666666666666666666666666666666666666666666
+	return 0.001666666666666666666666666666666666666666666666666666
 
 def register():
 	global lib

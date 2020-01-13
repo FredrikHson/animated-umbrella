@@ -12,12 +12,15 @@ void* libhandle = 0;
 void (*printjunk_ptr)(int) = 0;
 void (*printjunk2_ptr)(int, char*, int) = 0;
 float (*printjunkf_ptr)(int, float) = 0;
+void (*dothewave_ptr)(void*, void*, int) = 0;
+
+
 char workdir[PATH_MAX + 1] = {0};
 
 void init(const char* wd)
 {
     snprintf(workdir, PATH_MAX, "%s", wd);
-	printf("workdir %s\n",wd);
+    printf("workdir %s\n", wd);
 }
 
 void unloadLibrary()
@@ -45,6 +48,7 @@ void loadLibrary()
     printjunk_ptr = dlsym(libhandle, "printjunk");
     printjunk2_ptr = dlsym(libhandle, "printjunk2");
     printjunkf_ptr = dlsym(libhandle, "printjunkf");
+    dothewave_ptr = dlsym(libhandle, "dothewave");
 }
 
 sigjmp_buf before = {0};
@@ -59,9 +63,9 @@ static void sighandler(int sig, siginfo_t* info, void* ucontext)
 #define LOADCHECK(FUNCPTR)  \
     if(libhandle == 0) \
     { \
-		loadLibrary(); \
+        loadLibrary(); \
     } \
-    if(FUNCPTR != 0) \
+    if(FUNCPTR != 0)
 
 
 void printjunk(int num)
@@ -85,6 +89,14 @@ void printjunkf(int num, float f)
     LOADCHECK(printjunkf_ptr)
     {
         SAFERUN(i = (*printjunkf_ptr)(num, f);)
+    }
+}
+
+void dothewave(void* keyBase, void* keyShape, int time)
+{
+    LOADCHECK(printjunkf_ptr)
+    {
+        SAFERUN((*dothewave_ptr)(keyBase, keyShape, time);)
     }
 }
 
