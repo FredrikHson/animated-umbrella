@@ -9,8 +9,13 @@ import mathutils
 from ctypes import *
 import os
 import gc
+import platform
+
 lib=None
-libfile=os.path.dirname(__file__) + "/build/libfclothloader.so"
+if (platform.system() == "Linux"):
+	libfile=os.path.dirname(__file__) + "/build/libfclothloader.so"
+elif (platform.system() == "Windows"): # 100% untested and without the safetynet of the loader lib
+	libfile=os.path.dirname(__file__) + "/build/libfcloth.dll"
 
 def get_settings(context):
 	return context.scene.fcloth_settings
@@ -145,8 +150,9 @@ def register():
 	lib = CDLL(libfile)
 	print("scriptdir" +os.path.dirname(__file__))
 	path=os.path.dirname(__file__) + "/build"
-	lib.init(path.encode('ascii'))
-	lib.loadLibrary()
+	if (platform.system() == "Linux"):
+		lib.init(path.encode('ascii'))
+		lib.loadLibrary()
 	lib.printjunk(551)
 	bpy.types.Scene.fcloth_settings = bpy.props.PointerProperty(type=FClothSettings)
 
