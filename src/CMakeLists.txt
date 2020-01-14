@@ -12,7 +12,7 @@ if(USEOPENMP)
 endif()
 
 include_directories(
-	"src/"
+	"blender/source/blender/makesdna/"
 	)
 
 set(CMAKE_C_STANDARD 11)
