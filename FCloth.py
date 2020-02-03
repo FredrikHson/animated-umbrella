@@ -10,6 +10,7 @@ from ctypes import *
 import os
 import gc
 import platform
+import functools
 
 lib=None
 if (platform.system() == "Linux"):
@@ -40,10 +41,23 @@ class PANEL_PT_fCloth(bpy.types.Panel):
 		settings = get_settings(context)
 		col = layout.column(align=True)
 		col.operator("object.clothtest",text="add keys",icon="HAND")
-		col.operator("object.contrun",text="run continuous",icon="TIME")
+		if bpy.app.timers.is_registered(loop.update):
+			col.operator("object.contrun",text="STOP",icon="PAUSE")
+		else:
+			col.operator("object.contrun",text="run continuous",icon="PLAY")
 		col.operator("object.reset",text="reset",icon="FILE_REFRESH")
 		col.prop(settings,"collision_mesh")
 		col.prop(settings,"use_c")
+
+def addkeysifneeded(ob):
+	keys = ob.data.shape_keys.key_blocks.keys()
+	if "Basis" not in keys:
+		ob.shape_key_add(name="Basis")
+	if "cloth rest" not in keys:
+		ob.shape_key_add(name="cloth rest")
+	if "cloth shape" not in keys:
+		sk=ob.shape_key_add(name="cloth shape")
+		sk.value=1
 
 class test(bpy.types.Operator):
 	bl_idname = "object.clothtest"
@@ -51,20 +65,12 @@ class test(bpy.types.Operator):
 
 	def execute(self,context):
 		print("test pressed")
-		for ob in bpy.context.selected_objects:
+		for ob in context.selected_objects:
 			if ob.data.shape_keys is None:
 				ob.shape_key_add(name="Basis")
 				ob.shape_key_add(name="cloth rest")
 				sk=ob.shape_key_add(name="cloth shape")
-				sk.value=1
-			keys = ob.data.shape_keys.key_blocks.keys()
-			if "Basis" not in keys:
-				ob.shape_key_add(name="Basis")
-			if "cloth rest" not in keys:
-				ob.shape_key_add(name="cloth rest")
-			if "cloth shape" not in keys:
-				sk=ob.shape_key_add(name="cloth shape")
-				sk.value=1
+			addkeysifneeded(ob)
 			print(ob)
 		return {'FINISHED'}
 
@@ -74,20 +80,13 @@ class reset(bpy.types.Operator):
 
 	def execute(self,context):
 		print("reset pressed")
-		for ob in bpy.context.selected_objects:
+		for ob in context.selected_objects:
 			if ob.data.shape_keys is None:
 				ob.shape_key_add(name="Basis")
 				ob.shape_key_add(name="cloth rest")
 				sk=ob.shape_key_add(name="cloth shape")
 				sk.value=1
-			keys = ob.data.shape_keys.key_blocks.keys()
-			if "Basis" not in keys:
-				ob.shape_key_add(name="Basis")
-			if "cloth rest" not in keys:
-				ob.shape_key_add(name="cloth rest")
-			if "cloth shape" not in keys:
-				sk=ob.shape_key_add(name="cloth shape")
-				sk.value=1
+			addkeysifneeded(ob)
 			shape=ob.data.shape_keys.key_blocks['cloth shape']
 			origshape=ob.data.shape_keys.key_blocks['Basis']
 			shapedata=[0.0]*len(origshape.data)*3 # numverts*3
@@ -102,43 +101,49 @@ class contrun(bpy.types.Operator):
 
 	def execute(self,context):
 		print("contrun pressed")
-		if bpy.app.timers.is_registered(loopupdate):
-			print("unregister loopupdate")
-			bpy.app.timers.unregister(loopupdate)
+		if bpy.app.timers.is_registered(loop.update):
+			print("unregister loop.update")
+			bpy.app.timers.unregister(loop.update)
 		else:
-			print("register loopupdate")
-			bpy.app.timers.register(loopupdate)
+			print("register loop.update")
+			loop.selected_objects=context.selected_objects
+			bpy.app.timers.register(loop.update)
 
 		return {'FINISHED'}
 
-bpy.tartarus=0
+class loop():
+	tartarus=0
+	selected_objects=None
+	def update():
+		global lib
+		settings = get_settings(bpy.context)
+		# print(settings.collision_mesh.name)
+		for ob in loop.selected_objects:
+			if(ob.type != "MESH"):
+				continue
+			if(ob.mode != "OBJECT"):
+				return False
+				# bpy.app.timers.unregister(loop.update)
+			addkeysifneeded(ob)
+			shape=ob.data.shape_keys.key_blocks['cloth shape']
+			origshape=ob.data.shape_keys.key_blocks['Basis']
+			if(settings.use_c):
+				shape_ptr=cast(shape.as_pointer(),POINTER(c_int))
+				origshape_ptr=cast(origshape.as_pointer(),POINTER(c_int))
+				lib.dothewave(origshape_ptr,shape_ptr,loop.tartarus)
+			else:
+				# allocate shit
+				shapedata=[0]*len(origshape.data)*3 # numverts*3
+				origshape.data.foreach_get("co",shapedata)
+				for i in range(0, int(len(shapedata)),3):
+					shapedata[i]=shapedata[i]+sin(loop.tartarus*0.5+shapedata[i+2]*2.5)
+					shapedata[i+1]=shapedata[i+1]+cos(loop.tartarus*0.2+shapedata[i+2]*1)
+	
+				shape.data.foreach_set("co",shapedata)
+			shape.value=shape.value
 
-def loopupdate():
-	global lib
-	settings = get_settings(bpy.context)
-	if(settings.collision_mesh != None):
-		if(settings.collision_mesh.mode != "OBJECT"):
-			bpy.app.timers.unregister(loopupdate)
-			print("not in object mode stopping loopupdate")
-			return
-		shape=settings.collision_mesh.data.shape_keys.key_blocks['cloth shape']
-		origshape=settings.collision_mesh.data.shape_keys.key_blocks['Basis']
-		if(settings.use_c):
-			shape_ptr=cast(shape.as_pointer(),POINTER(c_int))
-			origshape_ptr=cast(origshape.as_pointer(),POINTER(c_int))
-			lib.dothewave(origshape_ptr,shape_ptr,bpy.tartarus)
-		else:
-			# allocate shit
-			shapedata=[0]*len(origshape.data)*3 # numverts*3
-			origshape.data.foreach_get("co",shapedata)
-			for i in range(0, int(len(shapedata)),3):
-				shapedata[i]=shapedata[i]+sin(bpy.tartarus*0.5+shapedata[i+2]*2.5)
-				shapedata[i+1]=shapedata[i+1]+cos(bpy.tartarus*0.2+shapedata[i+2]*1)
-
-			shape.data.foreach_set("co",shapedata)
-		shape.value=shape.value
-	bpy.tartarus+=1
-	return 0.001666666666666666666666666666666666666666666666666666
+		loop.tartarus+=1
+		return 0.0166
 
 def register():
 	global lib
@@ -164,9 +169,9 @@ def unregister():
 	bpy.utils.unregister_class(reset)
 	bpy.utils.unregister_class(contrun)
 	bpy.utils.unregister_class(FClothSettings)
-	if bpy.app.timers.is_registered(loopupdate):
-		print("unregister loopupdate")
-		bpy.app.timers.unregister(loopupdate)
+	if bpy.app.timers.is_registered(loop.update):
+		print("unregister loop.update")
+		bpy.app.timers.unregister(loop.update)
 	del bpy.types.Scene.fcloth_settings
 	reload_lib()
 
